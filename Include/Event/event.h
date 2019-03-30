@@ -64,6 +64,7 @@ class INetObserver
 };
 
 // 套接字继承于IEventHandle, 注册进入事件中心(Event), 从而获得事件通知
+// 所有需要注册进入事件中心的套接字对象只需继承此基类即可
 // 堆上的对象只能在handle_close中释放自己
 // 事件处理程序
 // 事件处理程序提供了一组接口，每个接口对应了一种类型的事件，供Reactor在相应的事件发生时调用，执行相应的事件处理。通常它会绑定一个有效的句柄。
@@ -144,7 +145,8 @@ class IEvent
 		// return: 0/成功 -1/失败	
 		virtual int shutdown_event(int) = 0;
 };
-// 事件注册进m_epollfd,收到事件后想线程池增加任务以处理事件
+// 事件注册进m_epollfd,收到事件后向线程池增加任务以处理事件
+// 事件继承自IEvent，线程池执行IThreadHandle中的threadhandle()
 class CEvent: public IEvent, public ThreadPool::IThreadHandle
 {
 	public:
@@ -154,6 +156,9 @@ class CEvent: public IEvent, public ThreadPool::IThreadHandle
 		int shutdown_event(int);
 		
 	protected:
+		// 事件中心创建一条线程eventwait_thread，在这里调用epoll_wait等待事件。
+		// 事件发生后将事件放入队列并向线程池投入任务。
+		// 线程池执行threadhandle接口
 		void threadhandle();
 		
 	private:
@@ -179,6 +184,11 @@ class CEvent: public IEvent, public ThreadPool::IThreadHandle
 		size_t tasksize();
 		int cleartask(int fd);
 		int unregister_event(int);
+		// 事件中心线程
+		// 事件中心创建一条线程eventwait_thread，在这里调用epoll_wait等待事件。
+		// 事件发生后将事件放入队列并向线程池投入任务。
+		// 线程池执行threadhandle接口
+		// 即每个Event除了线程池外还有一个线程用于epoll_wait
 		static void *eventwait_thread(void *arg);
 		
 	private:
@@ -192,7 +202,7 @@ class CEvent: public IEvent, public ThreadPool::IThreadHandle
 		struct epoll_event m_eventbuff[EventBuffLen];
 		
 		pthread_t m_detectionthread;
-
+		// 指向本线程的线程池
 		ThreadPool::IThreadPool *m_ithreadpool;
 };
 
